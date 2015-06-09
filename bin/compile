@@ -38,6 +38,7 @@ else
     echo "Use default buildout verbosity" | indent
 fi
 
+cp heroku.cfg $INSTALL_DIR/zinstance/
 cd $INSTALL_DIR/zinstance
 
 echo "-----> Bootstrap buildout"
@@ -50,4 +51,8 @@ sed "s|${BUILD_DIR}|/app|" parts/instance/etc/zope.conf > zope.conf.new
 mv zope.conf.new parts/instance/etc/zope.conf
 
 cp -r $BUILD_DIR/configure_zopeconf.py $INSTALL_DIR
+
+echo "ADMIN PASSWORD"
+cat $INSTALL_DIR/zinstance/adminPassword.txt
+
 echo "Done" | indent
