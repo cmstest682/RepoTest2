@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+# Heroku has opinions on indentation, let's respect them
+indent() {
+  sed -u 's/^/       /'
+}
+
+BUILD_DIR=$1  # -> temp dir that contains whatever is in the git repo
+CACHE_DIR=$2  # -> use this dir for caching between compiles
+ENV_DIR=$3  # -> environment variables are stored as files inside here
+INSTALL_DIR="$BUILD_DIR/plone"  # -> after buildout is
+# finished, copy results to this dir so they get compressed into a Heroku slug
+UI_URL=https://launchpad.net/plone/4.2/4.2.6/+download/Plone-4.2.6-UnifiedInstaller.tgz
+UI_TARBALL=Plone-4.2.6-UnifiedInstaller.tgz
+UI_DIR=Plone-4.2.6-UnifiedInstaller
+
+
+# make sure dirs exist
+mkdir -p $CACHE_DIR
+mkdir -p $INSTALL_DIR
+
+curl -OL $UI_URL
+tar xfz $UI_TARBALL
+cd $UI_DIR
+./install.sh standalone target=$INSTALL_DIR
+echo "Clean up Installer files" | indent
+cd ..
+rm -rf $UI_TARBALL $UI_DIR
+
+echo "-----> Read BUILDOUT_VERBOSITY from env vars, or use default"
+if [ -f $ENV_DIR/BUILDOUT_VERBOSITY ]; then
+    export "BUILDOUT_VERBOSITY=$(cat $ENV_DIR/BUILDOUT_VERBOSITY)"
+    echo "Use verbosity: ${BUILDOUT_VERBOSITY}" | indent
+else
+    export "BUILDOUT_VERBOSITY="
+    echo "Use default buildout verbosity" | indent
+fi
+
+cd $INSTALL_DIR/zinstance
+
+echo "-----> Bootstrap buildout"
+python bootstrap.py -c "heroku.cfg"
+echo "-----> Run bin/buildout -c heroku.cfg ${BUILDOUT_VERBOSITY}"
+./bin/buildout -c heroku.cfg $BUILDOUT_VERBOSITY
+
+echo "-----> Fix paths in zope.conf"
+sed "s|${BUILD_DIR}|/app|" parts/instance/etc/zope.conf > zope.conf.new
+mv zope.conf.new parts/instance/etc/zope.conf
+
+cp -r $BUILD_DIR/configure_zopeconf.py $INSTALL_DIR
+echo "Done" | indent
